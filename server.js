@@ -3,12 +3,15 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
-const BOOKS_FILE = path.join(__dirname, 'books.json');
-
 app.use(express.json());
 
+// Vercel uses a serverless model, so no app.listen()
+// We'll export app at the end instead.
 
+// Use path relative to project root
+const BOOKS_FILE = path.join(process.cwd(), 'books.json');
+
+// Helper: Read books
 async function readBooks() {
   try {
     const data = await fs.readFile(BOOKS_FILE, 'utf8');
@@ -19,6 +22,7 @@ async function readBooks() {
   }
 }
 
+// Helper: Write books
 async function writeBooks(books) {
   try {
     await fs.writeFile(BOOKS_FILE, JSON.stringify(books, null, 2));
@@ -28,29 +32,27 @@ async function writeBooks(books) {
   }
 }
 
-
-app.get('/books', async (req, res) => {
+// Routes
+app.get('/api/books', async (req, res) => {
   try {
     const books = await readBooks();
     res.json(books);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
-app.get('/books/available', async (req, res) => {
+app.get('/api/books/available', async (req, res) => {
   try {
     const books = await readBooks();
     const availableBooks = books.filter(book => book.available);
     res.json(availableBooks);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
-app.post('/books', async (req, res) => {
+app.post('/api/books', async (req, res) => {
   try {
     const { title, author, available } = req.body;
     if (!title || !author || available === undefined) {
@@ -58,56 +60,50 @@ app.post('/books', async (req, res) => {
     }
 
     const books = await readBooks();
-    const newId = books.length > 0 ? Math.max(...books.map(book => book.id)) + 1 : 1;
+    const newId = books.length > 0 ? Math.max(...books.map(b => b.id)) + 1 : 1;
     const newBook = { id: newId, title, author, available };
     books.push(newBook);
     await writeBooks(books);
     res.status(201).json(newBook);
-  } catch (error) {
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-
-app.put('/books/:id', async (req, res) => {
+app.put('/api/books/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const { title, author, available } = req.body;
 
     const books = await readBooks();
-    const bookIndex = books.findIndex(book => book.id === id);
-    if (bookIndex === -1) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
+    const index = books.findIndex(b => b.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Book not found' });
 
-    if (title !== undefined) books[bookIndex].title = title;
-    if (author !== undefined) books[bookIndex].author = author;
-    if (available !== undefined) books[bookIndex].available = available;
+    if (title !== undefined) books[index].title = title;
+    if (author !== undefined) books[index].author = author;
+    if (available !== undefined) books[index].available = available;
 
     await writeBooks(books);
-    res.json(books[bookIndex]);
-  } catch (error) {
+    res.json(books[index]);
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.delete('/books/:id', async (req, res) => {
+app.delete('/api/books/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const books = await readBooks();
-    const bookIndex = books.findIndex(book => book.id === id);
-    if (bookIndex === -1) {
-      return res.status(404).json({ error: 'Book not found' });
-    }
+    const index = books.findIndex(b => b.id === id);
+    if (index === -1) return res.status(404).json({ error: 'Book not found' });
 
-    const deletedBook = books.splice(bookIndex, 1)[0];
+    const deleted = books.splice(index, 1)[0];
     await writeBooks(books);
-    res.json(deletedBook);
-  } catch (error) {
+    res.json(deleted);
+  } catch {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// ✅ Export app for Vercel
+module.exports = app;
